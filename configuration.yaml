@@ -1,0 +1,34 @@
+frontend:
+config:
+history:
+logbook:
+map:
+ssdp:
+zeroconf:
+sun:
+system_health:
+mobile_app:
+
+shell_command:
+  reset_homekit_pairing_local: "bash /config/reset_homekit_pairing.sh"
+
+script:
+  reset_homekit_pairing_and_restart:
+    alias: "Сбросить спаривание HomeKit (локально)"
+    mode: single
+    sequence:
+      - service: shell_command.reset_homekit_pairing_local
+      - delay: "00:00:02"
+      - service: persistent_notification.create
+        data:
+          title: "HomeKit reset"
+          message: "Локальный сброс pairing выполнен. Home Assistant перезапускается. После запуска нажмите 'Перезапустить' у контейнера switch в Docker."
+      - service: homeassistant.restart
+
+template:
+  - button:
+      - name: "Сброс спаривания HomeKit (Pi3)"
+        unique_id: pi3_homekit_reset_button
+        icon: mdi:link-off
+        press:
+          - service: script.reset_homekit_pairing_and_restart

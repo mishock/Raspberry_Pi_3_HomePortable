@@ -1,0 +1,33 @@
+# Raspberry Pi 3: Home Assistant + HomeKit Switch, только контейнеры, host network.
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: homeassistant/home-assistant:${HOME_ASSISTANT_TAG:-2024.3.3}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./ha_config:/config
+      - ./switch/app:/switch_app
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+      - ./gai.conf:/etc/gai.conf:ro
+    environment:
+      - TZ=${TZ:-Europe/Moscow}
+
+  switch:
+    image: switch-local:latest
+    container_name: switch
+    network_mode: host
+    restart: unless-stopped
+    privileged: true
+    depends_on:
+      - homeassistant
+    environment:
+      # Явный IPv4 интерфейса в домашней сети (если авто-выбор из hostname -I ломает iPhone).
+      - HAP_BIND_ADDRESS=${HAP_BIND_ADDRESS:-}
+      - HA_TOKEN=${HA_TOKEN:-}
+    devices:
+      - /dev/gpiochip0:/dev/gpiochip0
+      - /dev/input:/dev/input
+    volumes:
+      - ./switch/app:/app/app

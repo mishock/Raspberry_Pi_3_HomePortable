@@ -1,0 +1,7 @@
+.env
+ha_config/.storage/
+ha_config/home-assistant.log
+switch/app/switch.state
+switch/app/switch.state.bak_*
+ha_config/.storage_backup_*
+**/__pycache__/
