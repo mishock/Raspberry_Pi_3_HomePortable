@@ -286,10 +286,39 @@ views:
           title: Активы на счёте
           show_header_toggle: false
 
-      - type: history-graph
-        title: Баланс Bybit — 90 дней
-        hours_to_show: 2160
-        refresh_interval: 600
-        entities:
+      # Плавный график по CSV (не HA history). Обновлено: 2026-11-17
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Баланс Bybit — 90 дней
+          show_states: true
+          colorize_states: true
+        graph_span: 90d
+        update_interval: 10min
+        span:
+          end: day
+        apex_config:
+          chart:
+            height: 240
+          stroke:
+            curve: smooth
+          markers:
+            size: 3
+        series:
           - entity: sensor.bybit_balance_usd
             name: Equity USD
+            type: area
+            curve: smooth
+            stroke_width: 2
+            opacity: 0.2
+            float_precision: 2
+            extend_to: false
+            data_generator: |
+              const req = new XMLHttpRequest();
+              req.open('GET', '/local/bybit_balance_history.json?t=' + Date.now(), false);
+              req.send(null);
+              if (req.status !== 200) return [];
+              const data = JSON.parse(req.responseText);
+              return (data.equity || [])
+                .map(p => [new Date(p.t + 'T12:00:00').getTime(), p.v])
+                .filter(([ts]) => ts >= start.getTime() && ts <= end.getTime());
