@@ -109,7 +109,7 @@ views:
           - entity: sensor.garage_electric_avg_monthly
             name: Средний за месяц
 
-      # Плавные кривые вместо ступенек history-graph (2026-11-17)
+      # Плавные кривые по точкам CSV (не история HA со ступеньками). Обновлено: 2026-11-17
       - type: custom:apexcharts-card
         header:
           show: true
@@ -118,11 +118,15 @@ views:
           colorize_states: true
         graph_span: 90d
         update_interval: 10min
+        span:
+          end: day
         apex_config:
           chart:
             height: 240
           stroke:
             curve: smooth
+          markers:
+            size: 3
           legend:
             show: true
         yaxis:
@@ -148,10 +152,16 @@ views:
             stroke_width: 2
             opacity: 0.18
             float_precision: 2
-            group_by:
-              func: last
-              duration: 1d
-            extend_to: end
+            extend_to: false
+            data_generator: |
+              const req = new XMLHttpRequest();
+              req.open('GET', '/local/garage_meter_history.json?t=' + Date.now(), false);
+              req.send(null);
+              if (req.status !== 200) return [];
+              const data = JSON.parse(req.responseText);
+              return (data.avg_daily || [])
+                .map(p => [new Date(p.t + 'T12:00:00').getTime(), p.v])
+                .filter(([ts]) => ts >= start.getTime() && ts <= end.getTime());
           - entity: sensor.garage_electric_avg_monthly
             name: kWh/месяц
             yaxis_id: monthly
@@ -159,10 +169,16 @@ views:
             curve: smooth
             stroke_width: 2
             float_precision: 1
-            group_by:
-              func: last
-              duration: 1d
-            extend_to: end
+            extend_to: false
+            data_generator: |
+              const req = new XMLHttpRequest();
+              req.open('GET', '/local/garage_meter_history.json?t=' + Date.now(), false);
+              req.send(null);
+              if (req.status !== 200) return [];
+              const data = JSON.parse(req.responseText);
+              return (data.avg_monthly || [])
+                .map(p => [new Date(p.t + 'T12:00:00').getTime(), p.v])
+                .filter(([ts]) => ts >= start.getTime() && ts <= end.getTime());
 
       - type: custom:apexcharts-card
         header:
@@ -172,11 +188,15 @@ views:
           colorize_states: true
         graph_span: 90d
         update_interval: 10min
+        span:
+          end: day
         apex_config:
           chart:
             height: 220
           stroke:
             curve: smooth
+          markers:
+            size: 4
         series:
           - entity: input_number.garage_electric_meter
             name: kWh
@@ -185,10 +205,16 @@ views:
             stroke_width: 2
             opacity: 0.2
             float_precision: 1
-            group_by:
-              func: last
-              duration: 1d
-            extend_to: end
+            extend_to: false
+            data_generator: |
+              const req = new XMLHttpRequest();
+              req.open('GET', '/local/garage_meter_history.json?t=' + Date.now(), false);
+              req.send(null);
+              if (req.status !== 200) return [];
+              const data = JSON.parse(req.responseText);
+              return (data.meter || [])
+                .map(p => [new Date(p.t + 'T12:00:00').getTime(), p.v])
+                .filter(([ts]) => ts >= start.getTime() && ts <= end.getTime());
 
   - title: Bybit
     path: bybit
