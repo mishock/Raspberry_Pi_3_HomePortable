@@ -1,0 +1,269 @@
+title: Pi 3
+views:
+  - title: Ворота
+    path: vorota
+    icon: mdi:garage-open
+    cards:
+      - type: markdown
+        content: |
+          ## Концевики ворот — живое состояние
+          **ON** = замкнут (упор сработал) · **OFF** = разомкнут · опрос каждую секунду.
+
+      - type: glance
+        title: Концевики
+        show_state: true
+        state_color: true
+        entities:
+          - entity: binary_sensor.kontsevik_vorot_open
+            name: OPEN (открыто)
+          - entity: binary_sensor.kontsevik_vorot_closed
+            name: CLOSED (закрыто)
+
+      - type: entities
+        title: Ворота
+        show_header_toggle: false
+        state_color: true
+        entities:
+          - entity: cover.vorota
+            name: Ворота
+          - entity: binary_sensor.kontsevik_vorot_open
+            name: Концевик OPEN
+          - entity: binary_sensor.kontsevik_vorot_closed
+            name: Концевик CLOSED
+
+      - type: history-graph
+        title: Концевики — 6 часов
+        hours_to_show: 6
+        refresh_interval: 5
+        entities:
+          - entity: binary_sensor.kontsevik_vorot_open
+            name: OPEN
+          - entity: binary_sensor.kontsevik_vorot_closed
+            name: CLOSED
+
+  - title: Мониторинг
+    path: monitor
+    icon: mdi:raspberry-pi
+    cards:
+      - type: markdown
+        content: |
+          ## Raspberry Pi 3 — температура CPU
+          Обновление каждые 5 минут · история до 30 суток.
+
+      - type: gauge
+        entity: sensor.pi3_cpu_temperature
+        name: CPU
+        unit: "°C"
+        min: 30
+        max: 85
+        needle: true
+        severity:
+          green: 30
+          yellow: 65
+          red: 75
+
+      - type: history-graph
+        title: Температура CPU — 24 часа
+        hours_to_show: 24
+        refresh_interval: 300
+        min_y_axis: 20
+        max_y_axis: 85
+        fit_y_data: true
+        entities:
+          - entity: sensor.pi3_cpu_temperature
+            name: CPU Pi 3
+
+      - type: history-graph
+        title: Температура CPU — 30 суток
+        hours_to_show: 720
+        refresh_interval: 600
+        min_y_axis: 20
+        max_y_axis: 85
+        fit_y_data: true
+        entities:
+          - entity: sensor.pi3_cpu_temperature
+            name: CPU Pi 3
+
+  - title: Счётчики
+    path: meters
+    icon: mdi:flash
+    cards:
+      - type: markdown
+        content: |
+          ## Электросчётчик гаража
+          Показания вносятся вручную: поле **Текущие показания** (комп или телефон — одно и то же)
+          или голос/чат «счётчик 87.05». Всё сохраняется в CSV; одна запись на дату (повтор = исправление).
+          **Средний расход** считается между внесёнными показаниями (нужно ≥2 записей).
+          Скрипт: `garage-meter-record.sh 59.21` · CSV: `ha_config/data/garage_electric_meter.csv`
+
+      - type: entities
+        title: Показания и средний расход
+        show_header_toggle: false
+        entities:
+          - entity: input_number.garage_electric_meter
+            name: Текущие показания
+          - entity: sensor.garage_electric_meter_delta
+            name: С прошлого внесения
+          - entity: sensor.garage_electric_avg_daily
+            name: Средний за день
+          - entity: sensor.garage_electric_avg_monthly
+            name: Средний за месяц
+
+      # Плавные кривые вместо ступенек history-graph (2026-11-17)
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Средний расход — день и месяц (90 дней)
+          show_states: true
+          colorize_states: true
+        graph_span: 90d
+        update_interval: 10min
+        apex_config:
+          chart:
+            height: 240
+          stroke:
+            curve: smooth
+          legend:
+            show: true
+        yaxis:
+          - id: daily
+            decimals: 2
+            min: ~0
+            apex_config:
+              title:
+                text: kWh/день
+          - id: monthly
+            opposite: true
+            decimals: 1
+            min: ~0
+            apex_config:
+              title:
+                text: kWh/мес
+        series:
+          - entity: sensor.garage_electric_avg_daily
+            name: kWh/день
+            yaxis_id: daily
+            type: area
+            curve: smooth
+            stroke_width: 2
+            opacity: 0.18
+            float_precision: 2
+            group_by:
+              func: last
+              duration: 1d
+            extend_to: end
+          - entity: sensor.garage_electric_avg_monthly
+            name: kWh/месяц
+            yaxis_id: monthly
+            type: line
+            curve: smooth
+            stroke_width: 2
+            float_precision: 1
+            group_by:
+              func: last
+              duration: 1d
+            extend_to: end
+
+      - type: custom:apexcharts-card
+        header:
+          show: true
+          title: Показания счётчика — 90 дней
+          show_states: true
+          colorize_states: true
+        graph_span: 90d
+        update_interval: 10min
+        apex_config:
+          chart:
+            height: 220
+          stroke:
+            curve: smooth
+        series:
+          - entity: input_number.garage_electric_meter
+            name: kWh
+            type: area
+            curve: smooth
+            stroke_width: 2
+            opacity: 0.2
+            float_precision: 1
+            group_by:
+              func: last
+              duration: 1d
+            extend_to: end
+
+  - title: Bybit
+    path: bybit
+    icon: mdi:bitcoin
+    cards:
+      - type: markdown
+        content: |
+          ## Bybit
+          Данные с **Pi 5** · синхронизация **08:00** · счёт **UNIFIED**
+
+      - type: gauge
+        entity: sensor.bybit_balance_usd
+        name: Equity
+        unit: USD
+        min: 0
+        max: 500
+        needle: true
+        severity:
+          green: 10
+          yellow: 100
+          red: 300
+
+      - type: entities
+        title: Баланс и обновление
+        show_header_toggle: false
+        entities:
+          - entity: script.bybit_balance_refresh
+            name: Обновить
+            icon: mdi:refresh
+          - entity: sensor.bybit_balance_usd
+            name: Equity (USD)
+          - entity: sensor.bybit_wallet_usd
+            name: Wallet (USD)
+          - entity: sensor.bybit_available_usd
+            name: Available (USD)
+          - entity: sensor.bybit_unrealised_pnl
+            name: Нереализ. PnL (USD)
+          - entity: sensor.bybit_last_sync
+            name: Обновлено
+          - entity: sensor.bybit_env
+            name: Окружение
+
+      - type: entities
+        title: Торги и валюта
+        show_header_toggle: false
+        entities:
+          - entity: sensor.bybit_settle_currency
+            name: Валюта маржи (фьючерсы)
+          - entity: sensor.bybit_trade_markets
+            name: Рынки
+          - entity: sensor.bybit_main_holding
+            name: Основной актив
+          - entity: sensor.bybit_positions_summary
+            name: Открытые позиции
+
+      - type: entity-filter
+        show_empty: false
+        entities:
+          - entity: sensor.bybit_asset_1
+          - entity: sensor.bybit_asset_2
+          - entity: sensor.bybit_asset_3
+          - entity: sensor.bybit_asset_4
+          - entity: sensor.bybit_asset_5
+          - entity: sensor.bybit_asset_6
+        state_filter:
+          - "not —"
+        card:
+          type: entities
+          title: Активы на счёте
+          show_header_toggle: false
+
+      - type: history-graph
+        title: Баланс Bybit — 90 дней
+        hours_to_show: 2160
+        refresh_interval: 600
+        entities:
+          - entity: sensor.bybit_balance_usd
+            name: Equity USD

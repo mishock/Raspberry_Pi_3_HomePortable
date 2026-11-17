@@ -1,29 +1,102 @@
+homeassistant:
+  packages: !include_dir_named packages
+  media_dirs:
+    timecapsule: /media/timecapsule
+
 frontend:
 config:
 history:
 logbook:
-map:
-ssdp:
 zeroconf:
+stream:
 sun:
 system_health:
 mobile_app:
 
+# HTTPS Companion через nginx :8443 (клиентский сертификат)
+# Обновлено: 2026-11-09
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
+    - ::1
+
+recorder:
+  purge_keep_days: 30
+  exclude:
+    domains:
+      - sun
+
 shell_command:
+  garage_motion_sync_threshold: >-
+    python3 /config/scripts/garage_motion_sync_threshold.py {{ states('input_number.garage_motion_sensitivity') | int(7) }}
+  garage_relay_ch3_on: 'python3 /config/scripts/garage_socket_cmd.py "SET 3 ON"'
+  garage_relay_ch3_off: 'python3 /config/scripts/garage_socket_cmd.py "SET 3 OFF"'
+  garage_relay_ch4_on: 'python3 /config/scripts/garage_socket_cmd.py "SET 4 ON"'
+  garage_relay_ch4_off: 'python3 /config/scripts/garage_socket_cmd.py "SET 4 OFF"'
+  garage_relay_ch5_on: 'python3 /config/scripts/garage_socket_cmd.py "SET 5 ON"'
+  garage_relay_ch5_off: 'python3 /config/scripts/garage_socket_cmd.py "SET 5 OFF"'
+  garage_relay_ch6_on: 'python3 /config/scripts/garage_socket_cmd.py "SET 6 ON"'
+  garage_relay_ch6_off: 'python3 /config/scripts/garage_socket_cmd.py "SET 6 OFF"'
+  garage_relay_ch7_on: 'python3 /config/scripts/garage_socket_cmd.py "SET 7 ON"'
+  garage_relay_ch7_off: 'python3 /config/scripts/garage_socket_cmd.py "SET 7 OFF"'
+  garage_relay_ch8_on: 'python3 /config/scripts/garage_socket_cmd.py "SET 8 ON"'
+  garage_relay_ch8_off: 'python3 /config/scripts/garage_socket_cmd.py "SET 8 OFF"'
+  garage_gate_open: 'python3 /config/scripts/garage_socket_cmd.py "GATE OPEN"'
+  garage_gate_close: 'python3 /config/scripts/garage_socket_cmd.py "GATE CLOSE"'
   reset_homekit_pairing_local: "bash /config/reset_homekit_pairing.sh"
+  bybit_balance_sync_now: "python3 /config/scripts/bybit_balance_sync.py"
+  garage_meter_record_ui: >-
+    python3 /config/scripts/garage_meter_record.py {{ value | float(0) }} --source ha-ui --no-ha
 
 script:
   reset_homekit_pairing_and_restart:
-    alias: "Сбросить спаривание HomeKit (локально)"
+    alias: "Сбросить спarивание HASS Bridge (Kali)"
     mode: single
     sequence:
       - service: shell_command.reset_homekit_pairing_local
       - delay: "00:00:02"
       - service: persistent_notification.create
         data:
-          title: "HomeKit reset"
-          message: "Локальный сброс pairing выполнен. Контейнер switch перезапущен автоматически. Home Assistant перезапускается."
+          title: "HASS Bridge reset"
+          message: "Сброшен только HASS Bridge (Kali). Мост Гараж на iPhone не затронут. Home Assistant перезапускается."
       - service: homeassistant.restart
+
+  bybit_balance_refresh:
+    alias: "Обновить баланс Bybit"
+    mode: single
+    sequence:
+      - service: shell_command.bybit_balance_sync_now
+      - delay: "00:00:02"
+      - service: homeassistant.update_entity
+        target:
+          entity_id:
+            - sensor.bybit_balance_usd
+            - sensor.bybit_wallet_usd
+            - sensor.bybit_available_usd
+            - sensor.bybit_env
+            - sensor.bybit_account_type
+            - sensor.bybit_settle_currency
+            - sensor.bybit_trade_markets
+            - sensor.bybit_main_holding
+            - sensor.bybit_positions_summary
+            - sensor.bybit_unrealised_pnl
+            - sensor.bybit_last_sync
+            - sensor.bybit_asset_1
+            - sensor.bybit_asset_2
+            - sensor.bybit_asset_3
+            - sensor.bybit_asset_4
+            - sensor.bybit_asset_5
+            - sensor.bybit_asset_6
+      - service: persistent_notification.create
+        data:
+          title: "Bybit"
+          message: >-
+            {{ states('sensor.bybit_balance_usd') }} USD ·
+            {{ states('sensor.bybit_main_holding') }} ·
+            маржа {{ states('sensor.bybit_settle_currency') }} ·
+            {{ states('sensor.bybit_positions_summary') }}
+          notification_id: bybit_balance_refresh
 
 template:
   - button:
@@ -32,3 +105,447 @@ template:
         icon: mdi:link-off
         press:
           - service: script.reset_homekit_pairing_and_restart
+  - cover:
+      - unique_id: garage_vorota
+        name: "Ворота"
+        open_cover:
+          - service: shell_command.garage_gate_open
+        close_cover:
+          - service: shell_command.garage_gate_close
+        stop_cover:
+          - service: shell_command.garage_gate_close
+
+  - switch:
+      - unique_id: garage_relay_ch3
+        name: "Выключатель 3"
+        state: "{{ is_state('sensor.garage_relay_ch3_state', 'on') }}"
+        turn_on:
+          - service: shell_command.garage_relay_ch3_on
+        turn_off:
+          - service: shell_command.garage_relay_ch3_off
+      - unique_id: garage_relay_ch4
+        name: "Выключатель 4"
+        state: "{{ is_state('sensor.garage_relay_ch4_state', 'on') }}"
+        turn_on:
+          - service: shell_command.garage_relay_ch4_on
+        turn_off:
+          - service: shell_command.garage_relay_ch4_off
+      - unique_id: garage_relay_ch5
+        name: "Выключатель 5"
+        state: "{{ is_state('sensor.garage_relay_ch5_state', 'on') }}"
+        turn_on:
+          - service: shell_command.garage_relay_ch5_on
+        turn_off:
+          - service: shell_command.garage_relay_ch5_off
+      - unique_id: garage_relay_ch6
+        name: "Выключатель 6"
+        state: "{{ is_state('sensor.garage_relay_ch6_state', 'on') }}"
+        turn_on:
+          - service: shell_command.garage_relay_ch6_on
+        turn_off:
+          - service: shell_command.garage_relay_ch6_off
+      - unique_id: garage_relay_ch7
+        name: "Выключатель 7"
+        state: "{{ is_state('sensor.garage_relay_ch7_state', 'on') }}"
+        turn_on:
+          - service: shell_command.garage_relay_ch7_on
+        turn_off:
+          - service: shell_command.garage_relay_ch7_off
+      - unique_id: garage_relay_ch8
+        name: "Выключатель 8"
+        state: "{{ is_state('sensor.garage_relay_ch8_state', 'on') }}"
+        turn_on:
+          - service: shell_command.garage_relay_ch8_on
+        turn_off:
+          - service: shell_command.garage_relay_ch8_off
+
+# Температура CPU Pi3. Значения публикует cron scripts/publish_cpu_temp.sh каждые 5 минут.
+command_line:
+  - sensor:
+      name: "Pi3 CPU Temperature"
+      unique_id: pi3_cpu_temp
+      command: "cat /config/host_status/cpu_temp.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "°C"
+      device_class: temperature
+      scan_interval: 300
+  - binary_sensor:
+      name: "Garage Motion"
+      unique_id: garage_camera_motion
+      device_class: motion
+      command: "cat /config/host_status/garage_motion.txt 2>/dev/null || echo off"
+      payload_on: "on"
+      payload_off: "off"
+      scan_interval: 30
+  - binary_sensor:
+      name: "Концевик ворот OPEN"
+      unique_id: garage_gate_sensor_open
+      icon: mdi:gate-open
+      command: "cat /config/host_status/garage_gate_sensor_open.txt 2>/dev/null || echo off"
+      payload_on: "on"
+      payload_off: "off"
+      scan_interval: 1
+  - binary_sensor:
+      name: "Концевик ворот CLOSED"
+      unique_id: garage_gate_sensor_closed
+      icon: mdi:gate
+      command: "cat /config/host_status/garage_gate_sensor_closed.txt 2>/dev/null || echo off"
+      payload_on: "on"
+      payload_off: "off"
+      scan_interval: 1
+
+# Состояние реле (файлы пишет мост switch при HA/iPhone)
+  - sensor:
+      name: "Garage relay CH3 state"
+      unique_id: garage_relay_ch3_state
+      command: "cat /config/host_status/garage_relay_ch3.txt 2>/dev/null || echo off"
+      scan_interval: 2
+  - sensor:
+      name: "Garage relay CH4 state"
+      unique_id: garage_relay_ch4_state
+      command: "cat /config/host_status/garage_relay_ch4.txt 2>/dev/null || echo off"
+      scan_interval: 2
+  - sensor:
+      name: "Garage relay CH5 state"
+      unique_id: garage_relay_ch5_state
+      command: "cat /config/host_status/garage_relay_ch5.txt 2>/dev/null || echo off"
+      scan_interval: 2
+  - sensor:
+      name: "Garage relay CH6 state"
+      unique_id: garage_relay_ch6_state
+      command: "cat /config/host_status/garage_relay_ch6.txt 2>/dev/null || echo off"
+      scan_interval: 2
+  - sensor:
+      name: "Garage relay CH7 state"
+      unique_id: garage_relay_ch7_state
+      command: "cat /config/host_status/garage_relay_ch7.txt 2>/dev/null || echo off"
+      scan_interval: 2
+  - sensor:
+      name: "Garage relay CH8 state"
+      unique_id: garage_relay_ch8_state
+      command: "cat /config/host_status/garage_relay_ch8.txt 2>/dev/null || echo off"
+      scan_interval: 2
+  - sensor:
+      name: "Garage electric meter"
+      unique_id: garage_electric_meter_sensor
+      command: "cat /config/host_status/garage_electric_meter.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "kWh"
+      device_class: energy
+      state_class: total_increasing
+      value_template: "{{ value | float(0) }}"
+      scan_interval: 300
+  - sensor:
+      name: "Garage electric meter delta"
+      unique_id: garage_electric_meter_delta
+      command: "cat /config/host_status/garage_electric_meter_delta.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "kWh"
+      state_class: measurement
+      value_template: "{{ value | float(0) }}"
+      scan_interval: 300
+  - sensor:
+      name: "Garage electric avg daily"
+      unique_id: garage_electric_avg_daily
+      command: "cat /config/host_status/garage_electric_avg_daily.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "kWh/d"
+      state_class: measurement
+      value_template: "{{ value | float(0) }}"
+      scan_interval: 300
+  - sensor:
+      name: "Garage electric avg monthly"
+      unique_id: garage_electric_avg_monthly
+      command: "cat /config/host_status/garage_electric_avg_monthly.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "kWh"
+      state_class: measurement
+      value_template: "{{ value | float(0) }}"
+      scan_interval: 300
+  - sensor:
+      name: "Bybit balance USD"
+      unique_id: bybit_balance_usd
+      command: "cat /config/host_status/bybit_balance_usd.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "USD"
+      device_class: monetary
+      state_class: total
+      value_template: "{{ value | float(0) }}"
+      availability: "{{ value | float(0) > 0 }}"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit wallet USD"
+      unique_id: bybit_wallet_usd
+      command: "cat /config/host_status/bybit_wallet_usd.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "USD"
+      device_class: monetary
+      state_class: total
+      value_template: "{{ value | float(0) }}"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit available USD"
+      unique_id: bybit_available_usd
+      command: "cat /config/host_status/bybit_available_usd.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "USD"
+      device_class: monetary
+      state_class: total
+      value_template: "{{ value | float(0) }}"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit env"
+      unique_id: bybit_env
+      command: "cat /config/host_status/bybit_env.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit account type"
+      unique_id: bybit_account_type
+      command: "cat /config/host_status/bybit_account_type.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit settle currency"
+      unique_id: bybit_settle_currency
+      command: "cat /config/host_status/bybit_settle_currency.txt 2>/dev/null || echo USDT"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit trade markets"
+      unique_id: bybit_trade_markets
+      command: "cat /config/host_status/bybit_trade_markets.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit main holding"
+      unique_id: bybit_main_holding
+      command: "cat /config/host_status/bybit_main_holding.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit positions summary"
+      unique_id: bybit_positions_summary
+      command: "cat /config/host_status/bybit_positions_summary.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit unrealised pnl"
+      unique_id: bybit_unrealised_pnl
+      command: "cat /config/host_status/bybit_unrealised_pnl.txt 2>/dev/null || echo 0"
+      unit_of_measurement: "USD"
+      device_class: monetary
+      state_class: measurement
+      value_template: "{{ value | float(0) }}"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit last sync"
+      unique_id: bybit_last_sync
+      command: "cat /config/host_status/bybit_last_sync.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit asset 1"
+      unique_id: bybit_asset_1
+      command: "cat /config/host_status/bybit_asset_1.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit asset 2"
+      unique_id: bybit_asset_2
+      command: "cat /config/host_status/bybit_asset_2.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit asset 3"
+      unique_id: bybit_asset_3
+      command: "cat /config/host_status/bybit_asset_3.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit asset 4"
+      unique_id: bybit_asset_4
+      command: "cat /config/host_status/bybit_asset_4.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit asset 5"
+      unique_id: bybit_asset_5
+      command: "cat /config/host_status/bybit_asset_5.txt 2>/dev/null || echo —"
+      scan_interval: 600
+  - sensor:
+      name: "Bybit asset 6"
+      unique_id: bybit_asset_6
+      command: "cat /config/host_status/bybit_asset_6.txt 2>/dev/null || echo —"
+      scan_interval: 600
+
+# Email-уведомления через Gmail SMTP (App Password из переменной окружения GMAIL_APP_PASSWORD).
+
+input_number:
+  garage_motion_sensitivity:
+    name: "Чувствительность движения (гараж)"
+    min: 1
+    max: 10
+    step: 1
+    initial: 7
+    mode: slider
+    icon: mdi:tune-vertical
+  garage_electric_meter:
+    name: "Электросчётчик гаража"
+    min: 0
+    max: 999999
+    step: 0.01
+    mode: box
+    unit_of_measurement: "kWh"
+    icon: mdi:counter
+
+input_boolean:
+  garage_motion_enabled:
+    name: "Детекция движения (гараж)"
+    icon: mdi:motion-sensor
+    initial: false
+
+notify:
+  - name: gmail
+    platform: smtp
+    server: smtp.gmail.com
+    port: 587
+    timeout: 15
+    sender: mishock24@gmail.com
+    encryption: starttls
+    username: mishock24@gmail.com
+    password: !env_var GMAIL_APP_PASSWORD
+    recipient:
+      - mishock24@gmail.com
+    sender_name: "Pi3 HomeAssistant"
+
+automation:
+  # Ввод в поле «Текущие показания» (комп или телефон — одна и та же сущность) → CSV.
+  - id: garage_electric_meter_ui_record
+    alias: "Гараж: показания счётчика из UI → CSV"
+    mode: queued
+    trigger:
+      - platform: state
+        entity_id: input_number.garage_electric_meter
+    condition:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.to_state is not none
+             and trigger.from_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state != trigger.from_state.state
+             and trigger.to_state.context.user_id is not none }}
+    action:
+      - service: shell_command.garage_meter_record_ui
+        data:
+          value: "{{ trigger.to_state.state }}"
+        response_variable: rec
+      - if:
+          - condition: template
+            value_template: "{{ rec.returncode != 0 }}"
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.garage_electric_meter
+            data:
+              value: "{{ states('sensor.garage_electric_meter') | float(0) }}"
+          - service: persistent_notification.create
+            data:
+              title: "Счётчик гаража: показание не принято"
+              message: "{{ trigger.to_state.state }} kWh — {{ rec.stderr }}"
+      - service: homeassistant.update_entity
+        target:
+          entity_id:
+            - sensor.garage_electric_meter
+            - sensor.garage_electric_meter_delta
+            - sensor.garage_electric_avg_daily
+            - sensor.garage_electric_avg_monthly
+
+  - id: garage_electric_meter_sync_on_start
+    alias: "Гараж: счётчик ← CSV при старте"
+    mode: single
+    trigger:
+      - platform: homeassistant
+        event: start
+    action:
+      - delay: "00:00:30"
+      - service: homeassistant.update_entity
+        target:
+          entity_id: sensor.garage_electric_meter
+      - condition: template
+        value_template: >-
+          {{ states('sensor.garage_electric_meter') | float(0) > 0 and
+             (states('sensor.garage_electric_meter') | float(0)
+              - states('input_number.garage_electric_meter') | float(0)) | abs > 0.001 }}
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.garage_electric_meter
+        data:
+          value: "{{ states('sensor.garage_electric_meter') | float(0) }}"
+
+  - id: garage_motion_sensitivity_sync
+    alias: "Garage: порог чувствительности"
+    mode: restart
+    trigger:
+      - platform: homeassistant
+        event: start
+      - platform: state
+        entity_id: input_number.garage_motion_sensitivity
+    action:
+      - service: shell_command.garage_motion_sync_threshold
+
+
+  - id: garage_motion_enabled_off_on_start
+    alias: "Garage: детекция выкл при старте"
+    mode: single
+    trigger:
+      - platform: homeassistant
+        event: start
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.garage_motion_enabled
+
+  - id: garage_motion_alert
+    alias: "Garage: движение"
+    description: "Сравнение снимков раз в минуту (cron на хосте)"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.garage_motion
+        from: "off"
+        to: "on"
+        for: "00:00:05"
+    condition:
+      - condition: state
+        entity_id: input_boolean.garage_motion_enabled
+        state: "on"
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "Гараж: движение"
+          message: "Изменение кадра Garage Camera."
+      - service: notify.gmail
+        data:
+          title: "Гараж: движение"
+          message: "Зафиксировано движение (сравнение снимков camera.garage_camera)."
+
+
+# Lovelace: apexcharts для плавных графиков счётчика (2026-11-17)
+lovelace:
+  mode: storage
+  resources:
+    - url: /local/apexcharts-card.js?v=2.2.3
+      type: module
+  dashboards:
+    ha-devtools:
+      mode: yaml
+      title: Инструменты
+      icon: mdi:tools
+      show_in_sidebar: true
+      filename: dashboards/devtools.yaml
+    timecapsule-media:
+      mode: yaml
+      title: Time Capsule
+      icon: mdi:apple
+      show_in_sidebar: true
+      filename: dashboards/timecapsule.yaml
+    pi3-monitor:
+      mode: yaml
+      title: Pi 3
+      icon: mdi:raspberry-pi
+      show_in_sidebar: true
+      filename: dashboards/pi3.yaml
+    jk-akb-4s-230:
+      mode: yaml
+      title: JK АКБ 4S 230Ah
+      icon: mdi:battery-high
+      show_in_sidebar: true
+      filename: dashboards/jk-akb-4s-230.yaml
+
+logger:
+  default: warning
+  logs:
+    aiohomekit: debug
+    homeassistant.components.homekit_controller: debug
